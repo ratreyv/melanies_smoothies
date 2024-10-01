@@ -1,12 +1,13 @@
 # Import python packages
 import streamlit as st
+import pandas as pd
 from snowflake.snowpark.context import get_active_session
-from snowflake.snowpark.functions import col
+from snowflake.snowpark.functions import col, when_matched
 
 # Write directly to the app
-st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
+st.title(":cup_with_straw: Pending Smoothie Orders  :cup_with_straw:")
 st.write(
-    """Choose the fruits you want in your custom Smoothie!.
+    """Orders that needs to filled.
     """
 )
 
@@ -22,33 +23,43 @@ st.write(
 #st.write('Your favorite fruit is: ' ,option)
 
 
-
-
 session = get_active_session()
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'))
+#my_dataframe = session.table("smoothies.public.orders").select(col('INGREDIENTS'),col('NAME_ON_ORDER'),col('ORDER_FILLED'))
+my_dataframe = session.table("smoothies.public.orders").filter(col("ORDER_FILLED")==0).collect()
 #st.dataframe(data=my_dataframe, use_container_width=True)
+#editable_df = st.data_editor(my_dataframe)
 
-ingredients_list = st.multiselect (
-    'Choose up to 5 ingredients :',
-    my_dataframe
-)
+editable_df = st.data_editor(my_dataframe,column_order=("ORDER_UID","INGREDIENTS","NAME_ON_ORDER","ORDER_FILLED"), use_container_width=True)
+ 
+#st.dataframe(editable_df)
 
-if ingredients_list:
-    st.write(ingredients_list)
-    st.text(ingredients_list)
+favorite_command = editable_df.loc[editable_df["ORDER_FILLED"].idxmax()]["ORDER_UID"]
+st.markdown(f"Your favorite command is **{favorite_command}** 🎈")
 
-    ingredients_string = ''
+#st.dataframe(data=editable_df, use_container_width=True)
 
-    for fruit_choosen in ingredients_list:
-        ingredients_string += fruit_choosen + ' '
+submitted = st.button('Submit')
 
-    #st.write(ingredients_string)
+if submitted:
+     
+    og_dataset = session.table("smoothies.public.orders")
+    
+    #edited_dataset = session.table("smoothies.public.orders")
+    
+    #edited_dataset = session.create_dataframe(editable_df)
+    edited_dataset = pd.DataFrame(editable_df)
 
-    my_insert_stmt = """ insert into smoothies.public.orders(ingredients)
-            values ('""" + ingredients_string + """')"""
+    try:
+        og_dataset.merge(edited_dataset
+                     , (og_dataset['ORDER_UID'] == edited_dataset['ORDER_UID'])
+                     , [when_matched().update({'ORDER_FILLED': edited_dataset['ORDER_FILLED']})]
+                    )
+        st.success("Order(s) Updated !",icon="👍")
+    except:
+        st.write('Something went wrong!')   
+    #st.success("Someone clicked the button. ",icon="👍")
 
-    #st.write(my_insert_stmt)
 
-    if ingredients_string:
-        session.sql(my_insert_stmt).collect()
-        st.success('Your Smoothie is ordered!', icon="✅")
+
+
+
