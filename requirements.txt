@@ -1,2 +1,4 @@
+python==3.8.*
 snowflake-snowpark-python==0.7.0
+
 
